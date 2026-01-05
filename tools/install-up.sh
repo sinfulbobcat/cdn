@@ -100,3 +100,4 @@ echo ""
 echo "🎉 Installation complete"
 echo "Restart your shell and run:"
 echo "  up --help"
+ #---end----
