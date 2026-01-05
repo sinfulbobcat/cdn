@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-UP_URL="https://cdn.jsdelivr.net/gh/USERNAME/REPO/tools/up.sh"
+UP_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
 INSTALL_DIR="$HOME/.local/bin"
 UP_SH="$INSTALL_DIR/up.sh"
 UP_LINK="$INSTALL_DIR/up"
