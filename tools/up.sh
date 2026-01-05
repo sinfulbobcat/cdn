@@ -1,7 +1,17 @@
 #!/bin/bash
 set -e
 
-REPO_DIR="$HOME/githubShit/cdn"
+CONFIG_FILE="$HOME/.config/up/config"
+
+if [ -f "$CONFIG_FILE" ]; then
+  . "$CONFIG_FILE"
+else
+  echo "❌ up is not configured"
+  echo "👉 Run the installer again or create:"
+  echo "   $CONFIG_FILE"
+  exit 1
+fi
+
 
 # ---------------- Help ----------------
 show_help() {
