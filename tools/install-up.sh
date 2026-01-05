@@ -1,7 +1,6 @@
 #!/bin/sh
 set -e
 
-# ---------------- Constants ----------------
 UP_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn@main/tools/up.sh"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.config/up"
@@ -10,7 +9,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 echo "📦 up — interactive installer"
 echo "--------------------------------"
 
-# ---------------- Install binary ----------------
+# ---------- Install binary ----------
 mkdir -p "$INSTALL_DIR"
 
 echo "⬇️  Downloading up.sh"
@@ -28,39 +27,37 @@ ln -sf "$INSTALL_DIR/up.sh" "$INSTALL_DIR/up"
 
 echo "✅ Installed binary: $INSTALL_DIR/up"
 
-# ---------------- Interactive config ----------------
+# ---------- Interactive config ----------
 mkdir -p "$CONFIG_DIR"
 
 echo ""
 echo "🛠️  Configuration"
 echo "-----------------"
 
-printf "Enter local path for your CDN repo: "
-read REPO_DIR < /dev/tty
+printf "Enter local path for your CDN repo: " > /dev/tty
+IFS= read -r REPO_DIR < /dev/tty
 
 if [ -z "$REPO_DIR" ]; then
   echo "❌ Repo directory cannot be empty"
   exit 1
 fi
 
-# Expand ~
 REPO_DIR=$(eval echo "$REPO_DIR")
 
-printf "Enter GitHub repo URL (HTTPS or SSH): "
-read REPO_URL < /dev/tty
+printf "Enter GitHub repo URL (HTTPS or SSH): " > /dev/tty
+IFS= read -r REPO_URL < /dev/tty
 
 if [ -z "$REPO_URL" ]; then
   echo "❌ Repo URL cannot be empty"
   exit 1
 fi
 
-# Clone if repo does not exist
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo ""
   echo "📁 Repo not found locally."
 
-  printf "Do you want to clone it now? [y/N]: "
-  read CLONE < /dev/tty
+  printf "Clone it now? [y/N]: " > /dev/tty
+  IFS= read -r CLONE < /dev/tty
 
   if [ "$CLONE" = "y" ] || [ "$CLONE" = "Y" ]; then
     git clone "$REPO_URL" "$REPO_DIR"
@@ -70,22 +67,19 @@ if [ ! -d "$REPO_DIR/.git" ]; then
   fi
 fi
 
-# Validate git repo
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo "❌ $REPO_DIR is not a git repository"
   exit 1
 fi
 
-# Write config
 cat > "$CONFIG_FILE" <<EOF
 REPO_DIR=$REPO_DIR
 REPO_URL=$REPO_URL
 EOF
 
-echo "✅ Configuration written to:"
-echo "   $CONFIG_FILE"
+echo "✅ Configuration written to $CONFIG_FILE"
 
-# ---------------- PATH handling ----------------
+# ---------- PATH ----------
 ensure_path() {
   FILE="$1"
   grep -q 'HOME/.local/bin' "$FILE" 2>/dev/null || \
@@ -104,9 +98,5 @@ fi
 
 echo ""
 echo "🎉 Installation complete"
-echo ""
-echo "➡️  Restart your shell or run:"
-echo "    exec \$SHELL"
-echo ""
-echo "Try:"
-echo "    up --help"
+echo "Restart your shell and run:"
+echo "  up --help"
