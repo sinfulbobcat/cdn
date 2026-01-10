@@ -45,10 +45,12 @@ cdn_url() {
 }
 
 copy_clipboard() {
-  if command -v wl-copy >/dev/null; then
-    wl-copy
-  elif command -v xclip >/dev/null; then
-    xclip -selection clipboard
+  local text="$1"
+
+  if command -v wl-copy >/dev/null 2>&1; then
+    printf "%s" "$text" | wl-copy
+  elif command -v xclip >/dev/null 2>&1; then
+    printf "%s" "$text" | xclip -selection clipboard
   fi
 }
 
