@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # Constants & Config
 # =========================
 CONFIG_FILE="$HOME/.config/up/config"
-UPDATE_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
+UPDATE_URL="https://raw.githubusercontent.com/sinfulbobcat/cdn/refs/heads/main/tools/up.sh"
 
 # =========================
 # Error handling

@@ -1,69 +1,105 @@
-#!/bin/sh
-set -e
+#!/usr/bin/env sh
+set -eu
 
-UP_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
+# =========================
+# Constants
+# =========================
+UP_URL="https://raw.githubusercontent.com/sinfulbobcat/cdn/refs/heads/main/tools/up.sh"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.config/up"
 CONFIG_FILE="$CONFIG_DIR/config"
 
-echo "📦 up — interactive installer"
-echo "--------------------------------"
-
-# --- sanity checks ---
-command -v git >/dev/null 2>&1 || {
-  echo "❌ git is required but not installed"
+# =========================
+# Helpers
+# =========================
+die() {
+  echo "❌ $*" >&2
   exit 1
 }
 
-# --- install binary ---
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+prompt() {
+  printf "%s" "$1" > /dev/tty
+  IFS= read -r REPLY < /dev/tty || true
+  printf "%s" "$REPLY"
+}
+
+expand_tilde() {
+  case "$1" in
+    "~"*) printf "%s\n" "$HOME${1#\~}" ;;
+    *)    printf "%s\n" "$1" ;;
+  esac
+}
+
+# =========================
+# Sanity checks
+# =========================
+need git
+need sed
+
+if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+  die "curl or wget is required"
+fi
+
+# =========================
+# Install up.sh
+# =========================
+echo "📦 up — installer"
+echo "-----------------"
+
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$CONFIG_DIR"
 
 echo "⬇️  Downloading up.sh"
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL "$UP_URL" -o "$INSTALL_DIR/up.sh"
-elif command -v wget >/dev/null 2>&1; then
-  wget -q "$UP_URL" -O "$INSTALL_DIR/up.sh"
 else
-  echo "❌ curl or wget is required"
-  exit 1
+  wget -q "$UP_URL" -O "$INSTALL_DIR/up.sh"
 fi
 
 chmod +x "$INSTALL_DIR/up.sh"
 ln -sf "$INSTALL_DIR/up.sh" "$INSTALL_DIR/up"
 
-echo "✅ Installed: $INSTALL_DIR/up"
+echo "✅ Installed binary: $INSTALL_DIR/up"
 
-# --- interactive config ---
-printf "Enter local path for your CDN repo: " > /dev/tty
-IFS= read -r REPO_DIR < /dev/tty
+# =========================
+# Interactive configuration
+# =========================
+mkdir -p "$CONFIG_DIR"
 
-[ -z "$REPO_DIR" ] && { echo "❌ Repo directory cannot be empty"; exit 1; }
+echo ""
+echo "🛠️  Configuration"
+echo "-----------------"
 
-case "$REPO_DIR" in
-  "~"*) REPO_DIR="$HOME${REPO_DIR#\~}" ;;
-esac
+REPO_DIR="$(prompt "Local path for your CDN repo: ")"
+[ -n "$REPO_DIR" ] || die "Repo directory cannot be empty"
+REPO_DIR="$(expand_tilde "$REPO_DIR")"
 
-printf "Enter GitHub repo URL (HTTPS or SSH): " > /dev/tty
-IFS= read -r REPO_URL < /dev/tty
+REPO_URL="$(prompt "GitHub repo URL (HTTPS or SSH): ")"
+[ -n "$REPO_URL" ] || die "Repo URL cannot be empty"
 
-[ -z "$REPO_URL" ] && { echo "❌ Repo URL cannot be empty"; exit 1; }
+# Basic URL sanity check
+echo "$REPO_URL" | grep -Eq '(github.com[:/].+/.+)' \
+  || die "Invalid GitHub repository URL"
 
+# Clone if needed
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo ""
-  printf "Repo not found locally. Clone now? [y/N]: " > /dev/tty
-  IFS= read -r CLONE < /dev/tty
-
+  CLONE="$(prompt "Repo not found locally. Clone it now? [y/N]: ")"
   if [ "$CLONE" = "y" ] || [ "$CLONE" = "Y" ]; then
     git clone "$REPO_URL" "$REPO_DIR"
   else
-    echo "❌ Cannot continue without a local repo"
-    exit 1
+    die "Cannot continue without a local git repository"
   fi
 fi
 
-[ -d "$REPO_DIR/.git" ] || { echo "❌ Not a git repo: $REPO_DIR"; exit 1; }
+[ -d "$REPO_DIR/.git" ] || die "Not a git repository: $REPO_DIR"
 
+# =========================
+# Write config
+# =========================
 cat > "$CONFIG_FILE" <<EOF
 REPO_DIR="$REPO_DIR"
 REPO_URL="$REPO_URL"
@@ -71,18 +107,33 @@ EOF
 
 echo "✅ Configuration written to $CONFIG_FILE"
 
-# --- PATH ---
-if command -v fish >/dev/null 2>&1 && [ -n "$FISH_VERSION" ]; then
+# =========================
+# PATH handling
+# =========================
+add_path() {
+  FILE="$1"
+  grep -q 'HOME/.local/bin' "$FILE" 2>/dev/null || \
+    printf '\n# Added by up installer\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$FILE"
+}
+
+if command -v fish >/dev/null 2>&1 && [ -n "${FISH_VERSION:-}" ]; then
   fish -c 'fish_add_path -U ~/.local/bin'
-elif [ -n "$BASH_VERSION" ]; then
-  grep -q 'HOME/.local/bin' "$HOME/.bashrc" 2>/dev/null || \
-    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
-elif [ -n "$ZSH_VERSION" ]; then
-  grep -q 'HOME/.local/bin' "$HOME/.zshrc" 2>/dev/null || \
-    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.zshrc"
+elif [ -n "${BASH_VERSION:-}" ]; then
+  add_path "$HOME/.bashrc"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  add_path "$HOME/.zshrc"
+else
+  add_path "$HOME/.profile"
 fi
 
+# =========================
+# Done
+# =========================
 echo ""
 echo "🎉 Installation complete"
-echo "Restart your shell and run:"
+echo ""
+echo "Restart your shell or run:"
+echo "  exec \$SHELL"
+echo ""
+echo "Try:"
 echo "  up --help"
