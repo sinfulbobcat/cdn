@@ -10,8 +10,9 @@ UPDATE_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
 # --- helpers ---
 repo_slug() {
   git -C "$REPO_DIR" config --get remote.origin.url \
-    | sed 's|.*github.com[:/]\(.*\)\.git|\1|'
+    | sed -E 's#(https://github.com/|git@github.com:)([^/]+/[^/.]+)(\.git)?#\2#'
 }
+
 
 cdn_url() {
   echo "https://cdn.jsdelivr.net/gh/$(repo_slug)/$1"
