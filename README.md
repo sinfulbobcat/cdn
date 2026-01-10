@@ -1,3 +1,7 @@
+> [!CAUTION]
+> this is fucked up with errors, please dont use the scripts in `tools/`.
+> only works for me ;(
+
 # up
 
 **`up`** is a minimal CLI tool that turns a GitHub repository into a **personal CDN powered by jsDelivr**.
