@@ -1,47 +1,23 @@
 #!/bin/bash
 set -e
 
-# ---------- Config ----------
 CONFIG_FILE="$HOME/.config/up/config"
 UPDATE_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
 
-if [ -f "$CONFIG_FILE" ]; then
-  . "$CONFIG_FILE"
-else
-  echo "❌ up is not configured"
-  echo "👉 Run the installer first"
-  exit 1
-fi
+[ -f "$CONFIG_FILE" ] || { echo "❌ up is not configured"; exit 1; }
+. "$CONFIG_FILE"
 
-# ---------- Helpers ----------
-spinner() {
-  local pid=$1
-  local spin='|/-\'
-  local i=0
-  while kill -0 "$pid" 2>/dev/null; do
-    i=$(( (i+1) %4 ))
-    printf "\r [%c] " "${spin:$i:1}"
-    sleep 0.1
-  done
-  printf "\r     \r"
-}
-
-run_silent() {
-  "$@" >/dev/null 2>&1 &
-  spinner $!
-}
-
-get_repo_slug() {
+# --- helpers ---
+repo_slug() {
   git -C "$REPO_DIR" config --get remote.origin.url \
-    | sed 's/.*github.com[:/]\(.*\)\.git/\1/'
+    | sed 's|.*github.com[:/]\(.*\)\.git|\1|'
 }
 
-get_cdn_url() {
-  local path="$1"
-  echo "https://cdn.jsdelivr.net/gh/$(get_repo_slug)/$path"
+cdn_url() {
+  echo "https://cdn.jsdelivr.net/gh/$(repo_slug)/$1"
 }
 
-copy_clipboard() {
+copy_clip() {
   if command -v wl-copy >/dev/null; then
     wl-copy
   elif command -v xclip >/dev/null; then
@@ -49,125 +25,105 @@ copy_clipboard() {
   fi
 }
 
-show_help() {
-  cat <<EOF
-Usage: up [options] <file>
-
-Options:
-  -h, --help              Show help
-  -l, --list              List CDN files with URLs
-  -c, --copy <file>       Copy CDN URL of file
-  -r, --remove <file>     Remove file from CDN repo
-  -t, --tag <tag>         Upload with git tag
-  -u, --update            Update up to latest version
-
-Examples:
-  up image.png
-  up assets/js/app.js
-  up -t v1.0.0 styles/main.css
-  up -l
-  up -c assets/js/app.js
-  up -r old.png
-  up -u
-EOF
+spinner() {
+  local pid=$1
+  local s='|/-\'
+  while kill -0 "$pid" 2>/dev/null; do
+    for c in $s; do
+      printf "\r [%c] " "$c"
+      sleep 0.1
+    done
+  done
+  printf "\r     \r"
 }
 
-# ---------- Flags ----------
-TAG=""
-REMOVE=""
+run() {
+  "$@" >/dev/null 2>&1 &
+  spinner $!
+}
+
+# --- flags ---
 LIST=false
 COPY=""
+REMOVE=""
+TAG=""
 UPDATE=false
 
-# ---------- Parse args ----------
 while [[ "$1" == -* ]]; do
   case "$1" in
-    -h|--help) show_help; exit 0 ;;
     -l|--list) LIST=true; shift ;;
     -c|--copy) COPY="$2"; shift 2 ;;
     -r|--remove) REMOVE="$2"; shift 2 ;;
     -t|--tag) TAG="$2"; shift 2 ;;
     -u|--update) UPDATE=true; shift ;;
-    *) echo "❌ Unknown option: $1"; show_help; exit 1 ;;
+    -h|--help)
+      echo "up [-l] [-c file] [-r file] [-t tag] [-u] <file>"
+      exit 0
+      ;;
+    *) echo "❌ Unknown option: $1"; exit 1 ;;
   esac
 done
 
-# ---------- UPDATE ----------
+# --- update ---
 if $UPDATE; then
   echo "⬇️  Updating up..."
-  run_silent curl -fsSL "$UPDATE_URL" -o "$0"
+  curl -fsSL "$UPDATE_URL" -o "$0"
   chmod +x "$0"
-  echo "✅ up updated successfully"
+  echo "✅ Updated"
   exit 0
 fi
 
-# ---------- LIST ----------
+# --- list ---
 if $LIST; then
   cd "$REPO_DIR"
-  echo "📦 CDN contents:"
-  echo ""
   find . -type f ! -path "./.git/*" | sed 's|^\./||' | while read -r f; do
-    printf "%-35s | %s\n" "$f" "$(get_cdn_url "$f")"
+    printf "%-35s | %s\n" "$f" "$(cdn_url "$f")"
   done
   exit 0
 fi
 
-# ---------- COPY ----------
+# --- copy ---
 if [ -n "$COPY" ]; then
   cd "$REPO_DIR"
-  [ ! -f "$COPY" ] && echo "❌ File not found: $COPY" && exit 1
-  URL=$(get_cdn_url "$COPY")
+  [ -f "$COPY" ] || { echo "❌ File not found"; exit 1; }
+  URL="$(cdn_url "$COPY")"
   echo "$URL"
-  echo "$URL" | copy_clipboard
-  echo "📋 URL copied"
+  echo "$URL" | copy_clip
   exit 0
 fi
 
-# ---------- REMOVE ----------
+# --- remove ---
 if [ -n "$REMOVE" ]; then
   cd "$REPO_DIR"
-  [ ! -f "$REMOVE" ] && echo "❌ File not found: $REMOVE" && exit 1
+  [ -f "$REMOVE" ] || { echo "❌ File not found"; exit 1; }
   read -p "Remove '$REMOVE'? [y/N]: " CONFIRM
-  [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]] && exit 0
-  echo -n "🗑️ Removing"
-  run_silent git rm "$REMOVE"
-  run_silent git commit -m "cdn: remove $REMOVE"
-  run_silent git push
-  echo " [done]"
+  [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
+  run git rm "$REMOVE"
+  run git commit -m "cdn: remove $REMOVE"
+  run git push
   exit 0
 fi
 
-# ---------- UPLOAD ----------
+# --- upload ---
 FILE="$1"
-[ -z "$FILE" ] && show_help && exit 1
+[ -z "$FILE" ] && { echo "❌ No file provided"; exit 1; }
 
-SRC_PWD="$(pwd)"
-[ ! -f "$SRC_PWD/$FILE" ] && echo "❌ File not found: $FILE" && exit 1
+SRC="$(pwd)/$FILE"
+[ -f "$SRC" ] || { echo "❌ File not found"; exit 1; }
 
-FILE_PATH="$(realpath "$SRC_PWD/$FILE")"
-REL_PATH="$(realpath --relative-to="$SRC_PWD" "$FILE_PATH")"
-DEST="$REPO_DIR/$REL_PATH"
+REL="$(realpath --relative-to="$(pwd)" "$SRC")"
+DEST="$REPO_DIR/$REL"
 
-echo "📁 Preserving path: $REL_PATH"
 mkdir -p "$(dirname "$DEST")"
-cp "$FILE_PATH" "$DEST"
+cp "$SRC" "$DEST"
 
 cd "$REPO_DIR"
+run git add "$REL"
+run git commit -m "cdn: add $REL"
+[ -n "$TAG" ] && run git tag "$TAG"
+run git push
+[ -n "$TAG" ] && run git push origin "$TAG"
 
-echo -n "⏳ Uploading"
-run_silent git add "$REL_PATH"
-run_silent git commit -m "cdn: add $REL_PATH"
-
-[ -n "$TAG" ] && run_silent git tag "$TAG"
-run_silent git push
-[ -n "$TAG" ] && run_silent git push origin "$TAG"
-
-URL=$(get_cdn_url "$REL_PATH")
-echo " [done]"
-echo ""
-echo "🌍 CDN URL:"
+URL="$(cdn_url "$REL")"
 echo "$URL"
-echo "$URL" | copy_clipboard
-echo "📋 URL copied"
-
-echo "✅ Upload complete"
+echo "$URL" | copy_clip

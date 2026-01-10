@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-UP_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn@main/tools/up.sh"
+UP_URL="https://cdn.jsdelivr.net/gh/sinfulbobcat/cdn/tools/up.sh"
 INSTALL_DIR="$HOME/.local/bin"
 CONFIG_DIR="$HOME/.config/up"
 CONFIG_FILE="$CONFIG_DIR/config"
@@ -9,8 +9,15 @@ CONFIG_FILE="$CONFIG_DIR/config"
 echo "📦 up — interactive installer"
 echo "--------------------------------"
 
-# ---------- Install binary ----------
+# --- sanity checks ---
+command -v git >/dev/null 2>&1 || {
+  echo "❌ git is required but not installed"
+  exit 1
+}
+
+# --- install binary ---
 mkdir -p "$INSTALL_DIR"
+mkdir -p "$CONFIG_DIR"
 
 echo "⬇️  Downloading up.sh"
 if command -v curl >/dev/null 2>&1; then
@@ -25,38 +32,26 @@ fi
 chmod +x "$INSTALL_DIR/up.sh"
 ln -sf "$INSTALL_DIR/up.sh" "$INSTALL_DIR/up"
 
-echo "✅ Installed binary: $INSTALL_DIR/up"
+echo "✅ Installed: $INSTALL_DIR/up"
 
-# ---------- Interactive config ----------
-mkdir -p "$CONFIG_DIR"
-
-echo ""
-echo "🛠️  Configuration"
-echo "-----------------"
-
+# --- interactive config ---
 printf "Enter local path for your CDN repo: " > /dev/tty
 IFS= read -r REPO_DIR < /dev/tty
 
-if [ -z "$REPO_DIR" ]; then
-  echo "❌ Repo directory cannot be empty"
-  exit 1
-fi
+[ -z "$REPO_DIR" ] && { echo "❌ Repo directory cannot be empty"; exit 1; }
 
-REPO_DIR=$(eval echo "$REPO_DIR")
+case "$REPO_DIR" in
+  "~"*) REPO_DIR="$HOME${REPO_DIR#\~}" ;;
+esac
 
 printf "Enter GitHub repo URL (HTTPS or SSH): " > /dev/tty
 IFS= read -r REPO_URL < /dev/tty
 
-if [ -z "$REPO_URL" ]; then
-  echo "❌ Repo URL cannot be empty"
-  exit 1
-fi
+[ -z "$REPO_URL" ] && { echo "❌ Repo URL cannot be empty"; exit 1; }
 
 if [ ! -d "$REPO_DIR/.git" ]; then
   echo ""
-  echo "📁 Repo not found locally."
-
-  printf "Clone it now? [y/N]: " > /dev/tty
+  printf "Repo not found locally. Clone now? [y/N]: " > /dev/tty
   IFS= read -r CLONE < /dev/tty
 
   if [ "$CLONE" = "y" ] || [ "$CLONE" = "Y" ]; then
@@ -67,33 +62,24 @@ if [ ! -d "$REPO_DIR/.git" ]; then
   fi
 fi
 
-if [ ! -d "$REPO_DIR/.git" ]; then
-  echo "❌ $REPO_DIR is not a git repository"
-  exit 1
-fi
+[ -d "$REPO_DIR/.git" ] || { echo "❌ Not a git repo: $REPO_DIR"; exit 1; }
 
 cat > "$CONFIG_FILE" <<EOF
-REPO_DIR=$REPO_DIR
-REPO_URL=$REPO_URL
+REPO_DIR="$REPO_DIR"
+REPO_URL="$REPO_URL"
 EOF
 
 echo "✅ Configuration written to $CONFIG_FILE"
 
-# ---------- PATH ----------
-ensure_path() {
-  FILE="$1"
-  grep -q 'HOME/.local/bin' "$FILE" 2>/dev/null || \
-    printf '\n# Added by up installer\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$FILE"
-}
-
+# --- PATH ---
 if command -v fish >/dev/null 2>&1 && [ -n "$FISH_VERSION" ]; then
   fish -c 'fish_add_path -U ~/.local/bin'
 elif [ -n "$BASH_VERSION" ]; then
-  ensure_path "$HOME/.bashrc"
+  grep -q 'HOME/.local/bin' "$HOME/.bashrc" 2>/dev/null || \
+    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
 elif [ -n "$ZSH_VERSION" ]; then
-  ensure_path "$HOME/.zshrc"
-else
-  ensure_path "$HOME/.profile"
+  grep -q 'HOME/.local/bin' "$HOME/.zshrc" 2>/dev/null || \
+    printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.zshrc"
 fi
 
 echo ""
